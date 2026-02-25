@@ -2,10 +2,10 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { 
-  Wallet, 
-  Lock, 
-  TrendingUp, 
+import {
+  Wallet,
+  Lock,
+  TrendingUp,
   ArrowUpRight,
   Package,
   ChevronRight,
@@ -28,22 +28,32 @@ const dashboardData = {
     { id: 2, name: '60-Day Lock', principal: 30000, apr: 10.2, progress: 72, maturityDate: '2024-02-28' },
   ],
   recentActivity: [
-    { id: 1, type: 'interest', amount: 16.44, date: '2024-01-15', status: 'success' },
-    { id: 2, type: 'interest', amount: 9.86, date: '2024-01-15', status: 'success' },
-    { id: 3, type: 'subscription', amount: -30000, date: '2024-01-10', status: 'success' },
-    { id: 4, type: 'withdrawal', amount: 5000, date: '2024-01-08', status: 'pending' },
+    { id: 1, type: 'dailyInterest', amount: 16.44, date: '2024-01-15', status: 'success' },
+    { id: 2, type: 'earlyRedemption', amount: 30000, date: '2024-01-10', status: 'success' },
+    { id: 3, type: 'dailyInterest', amount: 9.86, date: '2024-01-09', status: 'success' },
+    { id: 4, type: 'redemption', amount: 5000, date: '2024-01-08', status: 'pending' },
+    { id: 5, type: 'dailyInterest', amount: 12.50, date: '2024-01-07', status: 'success' },
   ],
 };
 
-function BalanceCard({ 
-  title, 
-  value, 
-  icon: Icon, 
+const getTypeLabel = (type: string) => {
+  const types: Record<string, string> = {
+    dailyInterest: 'Daily Interest',
+    earlyRedemption: 'Early Redemption',
+    redemption: 'Redemption',
+  };
+  return types[type] || type;
+};
+
+function BalanceCard({
+  title,
+  value,
+  icon: Icon,
   tooltip,
-  accent = false 
-}: { 
-  title: string; 
-  value: number; 
+  accent = false
+}: {
+  title: string;
+  value: number;
   icon: React.ElementType;
   tooltip?: string;
   accent?: boolean;
@@ -51,9 +61,8 @@ function BalanceCard({
   return (
     <div className="data-card">
       <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-          accent ? 'bg-accent/10' : 'bg-secondary'
-        }`}>
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? 'bg-accent/10' : 'bg-secondary'
+          }`}>
           <Icon className={`w-5 h-5 ${accent ? 'text-accent' : 'text-muted-foreground'}`} />
         </div>
         {tooltip && (
@@ -190,16 +199,15 @@ export default function DashboardPage() {
                 {dashboardData.recentActivity.map((activity) => (
                   <div key={activity.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                     <div>
-                      <p className="text-sm font-medium capitalize">{activity.type}</p>
+                      <p className="text-sm font-medium">{getTypeLabel(activity.type)}</p>
                       <p className="text-xs text-muted-foreground">{activity.date}</p>
                     </div>
                     <div className="text-right">
                       <p className={`font-medium ${activity.amount > 0 ? 'text-success' : ''}`}>
                         {activity.amount > 0 ? '+' : ''}${Math.abs(activity.amount).toLocaleString()}
                       </p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        activity.status === 'success' ? 'status-success' : 'status-pending'
-                      }`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${activity.status === 'success' ? 'status-success' : 'status-pending'
+                        }`}>
                         {activity.status === 'success' ? t('common.success') : t('common.pending')}
                       </span>
                     </div>

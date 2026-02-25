@@ -28,37 +28,41 @@ export function Header() {
                 {t('nav.home')}
               </Button>
             </Link>
-            <Link to="/dashboard">
-              <Button variant={location.pathname === '/dashboard' ? 'secondary' : 'ghost'} size="sm" className="text-sm">
-                {t('nav.dashboard')}
-              </Button>
-            </Link>
-            <Link to="/products">
-              <Button variant={location.pathname.startsWith('/products') ? 'secondary' : 'ghost'} size="sm" className="text-sm">
-                {t('nav.products')}
-              </Button>
-            </Link>
-
-            {isAdmin && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-sm gap-1">
-                    {t('nav.admin')}
-                    <ChevronDown className="w-4 h-4" />
+            {userRole !== 'admin' && (
+              <>
+                <Link to="/dashboard">
+                  <Button variant={location.pathname === '/dashboard' ? 'secondary' : 'ghost'} size="sm" className="text-sm">
+                    {t('nav.dashboard')}
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/liquidity">{t('nav.liquidity')}</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/pending">{t('nav.pending')}</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/manual">{t('nav.manual')}</Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </Link>
+                <Link to="/products">
+                  <Button variant={location.pathname.startsWith('/products') ? 'secondary' : 'ghost'} size="sm" className="text-sm">
+                    {t('nav.products')}
+                  </Button>
+                </Link>
+
+                {isAdmin && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-sm gap-1">
+                        {t('nav.admin')}
+                        <ChevronDown className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/liquidity">{t('nav.liquidity')}</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/pending">{t('nav.pending')}</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/manual">{t('nav.manual')}</Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </>
             )}
           </nav>
         )}
@@ -87,17 +91,17 @@ export function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem asChild>
-                  <Link to="/dashboard">{t('nav.dashboard')}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/packages">{t('nav.activePackages')}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/admin/liquidity">{t('nav.admin')}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {userRole !== 'admin' && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/dashboard">{t('nav.dashboard')}</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/packages">{t('nav.activePackages')}</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem className="text-destructive" onClick={() => {
                   localStorage.removeItem('userRole');
                   window.location.href = '/login';

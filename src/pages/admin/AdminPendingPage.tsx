@@ -14,7 +14,7 @@ const pendingTransactions = [
   {
     id: 1,
     type: 'withdrawal',
-    user: 'john.doe@email.com',
+    user: '3ff732cb-cf34-41fe-b587-3d2e8cb93c68',
     amount: 5000,
     reason: 'Insufficient liquidity',
     waitingTime: '2 hours',
@@ -24,7 +24,7 @@ const pendingTransactions = [
   {
     id: 2,
     type: 'maturity_payout',
-    user: 'jane.smith@email.com',
+    user: '8a2b5e1c-d4f7-48b2-a9c1-6e3f0d2c5b9a',
     amount: 25740.50,
     reason: 'Processing queue',
     waitingTime: '45 minutes',
@@ -34,17 +34,17 @@ const pendingTransactions = [
   {
     id: 3,
     type: 'early_redemption',
-    user: 'bob.wilson@email.com',
+    user: '1c9e4b7a-5d8f-4a3c-b2e1-9f6d0c7b4a5e',
     amount: 14850.00,
     reason: 'Manual review required',
     waitingTime: '4 hours',
-    status: 'review',
+    status: 'pending',
     createdAt: '2024-01-20 12:00',
   },
   {
     id: 4,
     type: 'interest_payout',
-    user: 'alice.brown@email.com',
+    user: '5f8d2a1b-c3e9-40b7-9a4c-8e2d1f0b6e3d',
     amount: 156.80,
     reason: 'System delay',
     waitingTime: '30 minutes',
@@ -67,9 +67,6 @@ export default function AdminPendingPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === 'review') {
-      return <Badge className="status-warning">Manual Review</Badge>;
-    }
     return <Badge className="status-pending">{t('common.pending')}</Badge>;
   };
 
@@ -93,7 +90,7 @@ export default function AdminPendingPage() {
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <div className="data-card">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
@@ -106,15 +103,6 @@ export default function AdminPendingPage() {
           <div className="data-card">
             <p className="text-sm text-muted-foreground mb-2">Total Pending Amount</p>
             <p className="text-2xl font-bold">${totalPending.toLocaleString()}</p>
-          </div>
-          <div className="data-card">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-warning" />
-              <span className="text-sm text-muted-foreground">Requires Review</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {pendingTransactions.filter(tx => tx.status === 'review').length}
-            </p>
           </div>
         </div>
 
