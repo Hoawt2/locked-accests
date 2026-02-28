@@ -33,7 +33,7 @@ interface ActionPackageResponse {
   startDate: string;
   maturityDate: string;
   principal: number;
-  interestRte: number;
+  interestRate: number;
   accruedInterest: number;
   holdingDays: number;
   progress: number;
@@ -41,7 +41,8 @@ interface ActionPackageResponse {
 }
 
 export interface PackageData {
-  id: string;
+  id: string; // This is the subscriptionId
+  earningId: number;
   productName: string;
   principal: number;
   interestRate: number;
@@ -80,9 +81,10 @@ export const fetchActivePackages = async (): Promise<PackageData[]> => {
 
     return {
       id: pkg.subscriptionId,
+      earningId: pkg.earningId,
       productName: `${termDays}-Lock Day`,
       principal: pkg.principal,
-      interestRate: pkg.interestRte ? Math.round(pkg.interestRte * 10000) / 100 : 0,
+      interestRate: Number((pkg.interestRate * 100).toFixed(2)),
       accruedInterest: pkg.accruedInterest || 0,
       holdingDays: pkg.holdingDays || 0,
       totalDays: termDays || 1,

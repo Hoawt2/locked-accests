@@ -34,18 +34,27 @@ const fetchWalletData = async () => {
   return result.data;
 };
 
-// Mock data (non-wallet)
-const dashboardData = {
-  totalInterest: 2340.50,
-  available: 1250.75,
-  recentActivity: [
-    { id: 1, type: 'dailyInterest', amount: 16.44, date: '2024-01-15', status: 'success' },
-    { id: 2, type: 'earlyRedemption', amount: 30000, date: '2024-01-10', status: 'success' },
-    { id: 3, type: 'dailyInterest', amount: 9.86, date: '2024-01-09', status: 'success' },
-    { id: 4, type: 'redemption', amount: 5000, date: '2024-01-08', status: 'pending' },
-    { id: 5, type: 'dailyInterest', amount: 12.50, date: '2024-01-07', status: 'success' },
-  ],
+// Fetch earnings summary from API
+const fetchEarningsSummary = async () => {
+  const walletId = localStorage.getItem('X-WALLET-ID');
+  if (!walletId) return null;
+
+  const response = await fetch('/api/user/earnings/summary', {
+    headers: { 'X-WALLET-ID': walletId },
+  });
+
+  if (!response.ok) throw new Error('Failed to fetch earnings summary');
+  const result = await response.json();
+  return result.data;
 };
+// Mock data for recent activity (since it's not connected to API yet)
+const recentActivity = [
+  { id: 1, type: 'dailyInterest', amount: 16.44, date: '2024-01-15', status: 'success' },
+  { id: 2, type: 'earlyRedemption', amount: 30000, date: '2024-01-10', status: 'success' },
+  { id: 3, type: 'dailyInterest', amount: 9.86, date: '2024-01-09', status: 'success' },
+  { id: 4, type: 'redemption', amount: 5000, date: '2024-01-08', status: 'pending' },
+  { id: 5, type: 'dailyInterest', amount: 12.50, date: '2024-01-07', status: 'success' },
+];
 
 const getTypeLabel = (type: string) => {
   const types: Record<string, string> = {
@@ -97,10 +106,16 @@ function BalanceCard({
 
 export default function DashboardPage() {
   const { t } = useLanguage();
+  const currentWalletId = localStorage.getItem('X-WALLET-ID') || '';
 
   const { data: walletData } = useQuery({
     queryKey: ['walletData'],
     queryFn: fetchWalletData,
+  });
+
+  const { data: earningsSummary } = useQuery({
+    queryKey: ['earningsSummary'],
+    queryFn: fetchEarningsSummary,
   });
 
   const { data: activePackages = [] } = useQuery({
@@ -120,7 +135,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold mb-1">{t('dashboard.title')}</h1>
-          <p className="text-muted-foreground">{t('dashboard.welcome')}, John Doe</p>
+          <p className="text-muted-foreground">{t('dashboard.welcome')}, {currentWalletId}</p>
         </div>
 
         {/* Balance Cards */}
@@ -144,13 +159,13 @@ export default function DashboardPage() {
           />
           <BalanceCard
             title={t('dashboard.totalInterest')}
-            value={dashboardData.totalInterest}
+            value={earningsSummary?.totalInterest ?? 0}
             icon={TrendingUp}
             accent
           />
           <BalanceCard
-            title="Available"
-            value={dashboardData.available}
+            title="Withdraw Available"
+            value={earningsSummary?.totalAvailable ?? 0}
             icon={DollarSign}
             tooltip="Total available amount ready for withdrawal"
           />
@@ -235,7 +250,7 @@ export default function DashboardPage() {
             <div className="data-card">
               <h2 className="text-lg font-semibold mb-4">{t('dashboard.recentActivity')}</h2>
               <div className="space-y-3">
-                {dashboardData.recentActivity.map((activity) => (
+                {recentActivity.map((activity) => (
                   <div key={activity.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                     <div>
                       <p className="text-sm font-medium">{getTypeLabel(activity.type)}</p>

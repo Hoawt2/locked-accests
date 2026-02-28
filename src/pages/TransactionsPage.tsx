@@ -11,18 +11,29 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Search, Filter, Calendar } from 'lucide-react';
+import { fetchActivePackages } from '@/pages/ActivePackagesPage';
 
-// Mock data
-const transactions = [
-  { id: 1, type: 'dailyInterest', packageName: '90-Day Lock', amount: 16.44, date: '2024-01-20', status: 'success' },
-  { id: 2, type: 'dailyInterest', packageName: '60-Day Lock', amount: 8.35, date: '2024-01-20', status: 'success' },
-  { id: 3, type: 'dailyInterest', packageName: '30-Day Lock', amount: 2.32, date: '2024-01-20', status: 'pending' },
-  { id: 4, type: 'dailyInterest', packageName: '90-Day Lock', amount: 16.44, date: '2024-01-19', status: 'success' },
-  { id: 5, type: 'earlyRedemption', packageName: '30-Day Lock', amount: 500, date: '2024-01-18', status: 'success' },
-  { id: 6, type: 'redemption', packageName: '30-Day Lock (Old)', amount: 5215.50, date: '2024-01-15', status: 'success' },
-  { id: 7, type: 'earlyRedemption', packageName: '60-Day Lock (Old)', amount: 14850.00, date: '2024-01-10', status: 'failed' },
-];
+// Fetch earning transactions
+const fetchTransactions = async () => {
+  const walletId = localStorage.getItem('X-WALLET-ID');
+  if (!walletId) return [];
+
+  const response = await fetch('/api/user/transaction/earning', {
+    headers: { 'X-WALLET-ID': walletId },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return [];
+    throw new Error('Failed to fetch transactions');
+  }
+
+  const result = await response.json();
+  return result.data || [];
+};
+
+
 
 export default function TransactionsPage() {
   const { t } = useLanguage();
@@ -30,10 +41,35 @@ export default function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredTransactions = transactions.filter((tx) => {
+  const { data: rawTransactions = [], isLoading } = useQuery({
+    queryKey: ['earningTransactions'],
+    queryFn: fetchTransactions,
+  });
+
+  const { data: activePackages = [] } = useQuery({
+    queryKey: ['activePackages'],
+    queryFn: fetchActivePackages,
+  });
+
+  // Map transactions to include subscriptionId if available
+  const transactions = rawTransactions.map((tx: any) => {
+    const matchedPackage = activePackages.find((pkg: any) => pkg.earningId === tx.earningId);
+    return {
+      id: tx.txId,
+      originalType: tx.type,
+      type: tx.type === 'DAILY_INTEREST' ? 'dailyInterest' : tx.type === 'EARLY_REDEEMED' ? 'earlyRedemption' : 'redemption',
+      earningId: tx.earningId,
+      subscriptionId: matchedPackage ? matchedPackage.id : `EARN-${tx.earningId}`,
+      amount: tx.amount,
+      date: tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : 'N/A',
+      status: tx.status === 'SUCCESS' ? 'success' : tx.status === 'PENDING' ? 'pending' : 'failed',
+    };
+  });
+
+  const filteredTransactions = transactions.filter((tx: any) => {
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (statusFilter !== 'all' && tx.status !== statusFilter) return false;
-    if (searchQuery && !tx.packageName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !String(tx.subscriptionId).toLowerCase().includes(searchQuery.toLowerCase()) && !String(tx.earningId).includes(searchQuery)) return false;
     return true;
   });
 
@@ -119,25 +155,33 @@ export default function TransactionsPage() {
                 <tr>
                   <th>{t('common.date')}</th>
                   <th>{t('transactions.type')}</th>
-                  <th>Package</th>
+                  <th>Subscription</th>
                   <th>{t('common.amount')}</th>
                   <th>{t('common.status')}</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td className="text-muted-foreground">{tx.date}</td>
-                    <td>
-                      <span className="font-medium">{getTypeLabel(tx.type)}</span>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Loading transactions...
                     </td>
-                    <td>{tx.packageName}</td>
-                    <td className={`font-medium ${tx.amount > 0 ? 'text-success' : ''}`}>
-                      {tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td>{getStatusBadge(tx.status)}</td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTransactions.map((tx: any) => (
+                    <tr key={tx.id}>
+                      <td className="text-muted-foreground">{tx.date}</td>
+                      <td>
+                        <span className="font-medium">{getTypeLabel(tx.type)}</span>
+                      </td>
+                      <td className="text-muted-foreground font-mono text-sm">{tx.subscriptionId}</td>
+                      <td className={`font-medium ${tx.amount > 0 ? 'text-success' : ''}`}>
+                        {tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td>{getStatusBadge(tx.status)}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
