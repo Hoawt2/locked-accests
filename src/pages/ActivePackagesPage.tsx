@@ -3,7 +3,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Eye,
   Clock,
   Info,
   AlertTriangle
@@ -97,22 +96,81 @@ export const fetchActivePackages = async (): Promise<PackageData[]> => {
   });
 };
 
+interface EarlyRedeemPreview {
+  earningId: number;
+  principal: number;
+  accruedInterest: number;
+  currentProgress: number;
+  penaltyRate: number;
+  penaltyAmount: number;
+  finalReceivableAmount: number;
+}
+
 function EarlyRedemptionDialog({ pkg }: { pkg: PackageData }) {
   const { t } = useLanguage();
+  const [isOpen, setIsOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [preview, setPreview] = useState<EarlyRedeemPreview | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const penaltyAmount = (pkg.principal * pkg.penaltyRate) / 100;
-  const finalAmount = pkg.principal + pkg.accruedInterest - penaltyAmount;
+  const walletId = localStorage.getItem('X-WALLET-ID') || '';
 
-  const handleConfirm = () => {
-    setIsConfirming(true);
-    setTimeout(() => {
-      setIsConfirming(false);
-    }, 2000);
+  const fetchPreview = async () => {
+    setIsLoadingPreview(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/user/earnings/${pkg.earningId}/early-redeem/preview`, {
+        headers: { 'X-WALLET-ID': walletId },
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to fetch preview');
+      }
+      setPreview(result.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsLoadingPreview(false);
+    }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open) {
+      fetchPreview();
+    } else {
+      setPreview(null);
+      setError(null);
+    }
+  };
+
+  const handleConfirm = async () => {
+    setIsConfirming(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/user/earnings/${pkg.earningId}/early-redeem`, {
+        method: 'POST',
+        headers: {
+          'X-WALLET-ID': walletId,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Early redemption failed');
+      setIsOpen(false);
+      // Reload the page to reflect updated data
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+
+
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -135,51 +193,63 @@ function EarlyRedemptionDialog({ pkg }: { pkg: PackageData }) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="p-4 bg-secondary/50 rounded-lg space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('packages.principal')}</span>
-              <span className="font-medium">${pkg.principal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('packages.accruedInterest')}</span>
-              <span className="font-medium text-success">+${pkg.accruedInterest.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('redemption.currentProgress')}</span>
-              <span className="font-medium">{Math.round((pkg.holdingDays / pkg.totalDays) * 100)}%</span>
-            </div>
-            <hr className="border-border" />
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('redemption.penaltyRate')}</span>
-              <span className="font-medium text-destructive">{pkg.penaltyRate}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">{t('redemption.penaltyAmount')}</span>
-              <span className="font-medium text-destructive">-${penaltyAmount.toLocaleString()}</span>
-            </div>
-            <hr className="border-border" />
-            <div className="flex justify-between">
-              <span className="font-medium">{t('redemption.finalAmount')}</span>
-              <span className="text-lg font-bold text-accent">${finalAmount.toLocaleString()}</span>
-            </div>
+        {isLoadingPreview ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
           </div>
+        ) : error ? (
+          <div className="py-6 text-center text-destructive text-sm">{error}</div>
+        ) : preview ? (
+          <>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-secondary/50 rounded-lg space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('packages.principal')}</span>
+                  <span className="font-medium">${preview.principal.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('packages.accruedInterest')}</span>
+                  <span className="font-medium text-success">+${preview.accruedInterest.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('redemption.currentProgress')}</span>
+                  <span className="font-medium">{preview.currentProgress}%</span>
+                </div>
+                <hr className="border-border" />
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('redemption.penaltyRate')}</span>
+                  <span className="font-medium text-destructive">{preview.penaltyRate}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{t('redemption.penaltyAmount')}</span>
+                  <span className="font-medium text-destructive">-${preview.penaltyAmount.toLocaleString()}</span>
+                </div>
+                <hr className="border-border" />
+                <div className="flex justify-between">
+                  <span className="font-medium">{t('redemption.finalAmount')}</span>
+                  <span className="text-lg font-bold text-accent">${preview.finalReceivableAmount.toLocaleString()}</span>
+                </div>
+              </div>
 
-          <p className="text-sm text-muted-foreground text-center">
-            {t('redemption.confirmMessage')}
-          </p>
-        </div>
+              <p className="text-sm text-muted-foreground text-center">
+                {t('redemption.confirmMessage')}
+              </p>
+            </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline">{t('common.cancel')}</Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={isConfirming}
-            className="bg-destructive hover:bg-destructive/90"
-          >
-            {isConfirming ? t('common.loading') : t('common.confirm')}
-          </Button>
-        </DialogFooter>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setIsOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                onClick={handleConfirm}
+                disabled={isConfirming}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                {isConfirming ? t('common.loading') : t('common.confirm')}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
@@ -213,6 +283,7 @@ export default function ActivePackagesPage() {
               <thead>
                 <tr>
                   <th>Product</th>
+                  <th>Subscription</th>
                   <th>{t('packages.principal')}</th>
                   <th>
                     <div className="flex items-center gap-1">
@@ -255,6 +326,11 @@ export default function ActivePackagesPage() {
                       <td>
                         <div className="font-medium">{pkg.productName}</div>
                       </td>
+                      <td className="text-sm font-mono text-muted-foreground">
+                        <span title={pkg.id}>
+                          {pkg.id.length > 8 ? `${pkg.id.substring(0, 8)}...` : pkg.id}
+                        </span>
+                      </td>
                       <td className="font-medium">${pkg.principal.toLocaleString()}</td>
                       <td>
                         <Badge className="status-success">{pkg.interestRate}%</Badge>
@@ -277,9 +353,6 @@ export default function ActivePackagesPage() {
                       </td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
-                            <Eye className="w-4 h-4" />
-                          </Button>
                           <EarlyRedemptionDialog pkg={pkg} />
                         </div>
                       </td>

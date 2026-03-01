@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -20,55 +20,104 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-
-// Mock product data
-const products = [
-  { id: 1, name: '30-Day Lock', term: 30, apr: 8.5, minAmount: 100, maxAmount: 50000, quota: 125000, status: 'active' },
-  { id: 2, name: '60-Day Lock', term: 60, apr: 10.2, minAmount: 500, maxAmount: 100000, quota: 89000, status: 'active' },
-  { id: 3, name: '90-Day Lock', term: 90, apr: 12.0, minAmount: 1000, maxAmount: 200000, quota: 0, status: 'full' },
-  { id: 4, name: '180-Day Lock', term: 180, apr: 15.5, minAmount: 5000, maxAmount: 500000, quota: 450000, status: 'active' },
-  { id: 5, name: '365-Day Lock', term: 365, apr: 18.0, minAmount: 10000, maxAmount: 1000000, quota: 800000, status: 'inactive' },
-];
+import { useQuery } from '@tanstack/react-query';
+import { fetchLockedProducts } from '@/pages/ProductsPage';
 
 export default function SubscribePage() {
   const { t } = useLanguage();
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  const product = products.find(p => p.id === Number(id)) || products[0];
-  
+
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['lockedProducts'],
+    queryFn: fetchLockedProducts,
+  });
+
+  const product = products.find(p => p.id === Number(id));
+
   const [amount, setAmount] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<'success' | 'failed' | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
+  if (isLoading) {
+    return (
+      <MainLayout hideSidebar>
+        <div className="flex items-center justify-center py-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!product) {
+    return (
+      <MainLayout hideSidebar>
+        <div className="p-6 max-w-2xl mx-auto text-center py-16">
+          <p className="text-muted-foreground">Product not found</p>
+          <Link to="/products">
+            <Button variant="outline" className="mt-4">{t('common.back')}</Button>
+          </Link>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const aprPercent = Number((product.interestRate * 100).toFixed(2));
   const numAmount = parseFloat(amount) || 0;
   const isValid = numAmount >= product.minAmount && numAmount <= product.maxAmount;
-  const estimatedInterest = (numAmount * product.apr / 100 / 365) * product.term;
+  const estimatedInterest = numAmount * product.interestRate * (product.termDays / 360);
 
   const handleSubscribe = () => {
     if (!isValid) return;
     setShowConfirm(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setIsProcessing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsProcessing(false);
+    setErrorMessage('');
+
+    try {
+      const walletId = localStorage.getItem('X-WALLET-ID') || '';
+      const response = await fetch('/api/user/subscriptions', {
+        method: 'POST',
+        headers: {
+          'X-WALLET-ID': walletId,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          productId: product.id,
+          principal: numAmount,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Subscription failed');
+      }
+
       setShowConfirm(false);
-      // Random success/fail for demo
-      setResult(Math.random() > 0.2 ? 'success' : 'failed');
-    }, 2000);
+      setResult('success');
+    } catch (err) {
+      console.error('Subscription error:', err);
+      setShowConfirm(false);
+      setErrorMessage(err instanceof Error ? err.message : 'Something went wrong');
+      setResult('failed');
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  const productName = `${product.termDays}-Day Lock`;
 
   if (result) {
     return (
       <MainLayout hideSidebar>
         <div className="p-6 max-w-md mx-auto text-center py-20">
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-            result === 'success' ? 'bg-success/10' : 'bg-destructive/10'
-          }`}>
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${result === 'success' ? 'bg-success/10' : 'bg-destructive/10'
+            }`}>
             {result === 'success' ? (
               <CheckCircle2 className="w-10 h-10 text-success" />
             ) : (
@@ -79,9 +128,9 @@ export default function SubscribePage() {
             {result === 'success' ? t('product.subscriptionSuccess') : t('product.subscriptionFailed')}
           </h1>
           <p className="text-muted-foreground mb-8">
-            {result === 'success' 
-              ? `You have successfully invested $${numAmount.toLocaleString()} in ${product.name}.`
-              : 'There was an error processing your subscription. Please try again.'
+            {result === 'success'
+              ? `You have successfully invested $${numAmount.toLocaleString()} in ${productName}.`
+              : errorMessage || 'There was an error processing your subscription. Please try again.'
             }
           </p>
           <div className="flex gap-4 justify-center">
@@ -125,18 +174,18 @@ export default function SubscribePage() {
           {t('common.back')}
         </Link>
 
-        <h1 className="text-2xl font-bold mb-6">{t('common.subscribe')} - {product.name}</h1>
+        <h1 className="text-2xl font-bold mb-6">{t('common.subscribe')} - {productName}</h1>
 
         {/* Product Summary */}
         <div className="data-card mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">{t('landing.term')}</p>
-              <p className="font-semibold">{product.term} {t('common.days')}</p>
+              <p className="font-semibold">{product.termDays} {t('common.days')}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{t('landing.apr')}</p>
-              <p className="font-semibold text-accent">{product.apr}%</p>
+              <p className="font-semibold text-accent">{aprPercent}%</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{t('landing.minAmount')}</p>
@@ -195,7 +244,7 @@ export default function SubscribePage() {
                   <div>
                     <p className="text-sm text-muted-foreground">Maturity Date</p>
                     <p className="font-semibold">
-                      {new Date(Date.now() + product.term * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                      {new Date(Date.now() + product.termDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
                     </p>
                   </div>
                   <div>
@@ -215,7 +264,7 @@ export default function SubscribePage() {
               {t('common.cancel')}
             </Button>
           </Link>
-          <Button 
+          <Button
             onClick={handleSubscribe}
             disabled={!isValid}
             className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
@@ -233,11 +282,11 @@ export default function SubscribePage() {
                 Please review your investment details before confirming.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="py-4 space-y-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Product</span>
-                <span className="font-medium">{product.name}</span>
+                <span className="font-medium">{productName}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Amount</span>
@@ -245,11 +294,11 @@ export default function SubscribePage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">APR</span>
-                <span className="font-medium text-accent">{product.apr}%</span>
+                <span className="font-medium text-accent">{aprPercent}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Term</span>
-                <span className="font-medium">{product.term} days</span>
+                <span className="font-medium">{product.termDays} days</span>
               </div>
               <hr className="border-border" />
               <div className="flex justify-between">
@@ -262,7 +311,7 @@ export default function SubscribePage() {
               <Button variant="outline" onClick={() => setShowConfirm(false)}>
                 {t('common.cancel')}
               </Button>
-              <Button 
+              <Button
                 onClick={handleConfirm}
                 disabled={isProcessing}
                 className="bg-accent hover:bg-accent/90"

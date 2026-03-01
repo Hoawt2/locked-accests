@@ -5,18 +5,40 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
 
-// Mock product data
-const products = [
-  { id: 1, name: '30-Day Lock', term: 30, apr: 8.5, minAmount: 100, maxAmount: 50000, quota: 125000, status: 'active' },
-  { id: 2, name: '60-Day Lock', term: 60, apr: 10.2, minAmount: 500, maxAmount: 100000, quota: 89000, status: 'active' },
-  { id: 3, name: '90-Day Lock', term: 90, apr: 12.0, minAmount: 1000, maxAmount: 200000, quota: 0, status: 'full' },
-  { id: 4, name: '180-Day Lock', term: 180, apr: 15.5, minAmount: 5000, maxAmount: 500000, quota: 450000, status: 'active' },
-  { id: 5, name: '365-Day Lock', term: 365, apr: 18.0, minAmount: 10000, maxAmount: 1000000, quota: 800000, status: 'inactive' },
-];
+export interface LockedProduct {
+  id: number;
+  termDays: number;
+  interestRate: number;
+  minAmount: number;
+  maxAmount: number;
+  totalQuota: number;
+  availableQuota: number;
+  status: string;
+}
+
+export const fetchLockedProducts = async (): Promise<LockedProduct[]> => {
+  const response = await fetch('/api/cms/locked-products');
+  if (!response.ok) throw new Error('Failed to fetch products');
+  const result = await response.json();
+  return result.data || [];
+};
 
 export default function ProductsPage() {
   const { t } = useLanguage();
+
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['lockedProducts'],
+    queryFn: fetchLockedProducts,
+  });
+
+  const getStatusKey = (product: LockedProduct) => {
+    const s = product.status?.toUpperCase();
+    if (s === 'ACTIVE') return 'active';
+    if (s === 'FULL' || product.availableQuota <= 0) return 'full';
+    return 'inactive';
+  };
 
   const statusConfig = {
     active: { label: t('common.active'), className: 'status-success' },
@@ -35,69 +57,77 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        {/* Products Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product) => {
-            const status = statusConfig[product.status as keyof typeof statusConfig];
-            const isAvailable = product.status === 'active';
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          </div>
+        ) : (
+          /* Products Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map((product) => {
+              const statusKey = getStatusKey(product);
+              const status = statusConfig[statusKey];
+              const isAvailable = statusKey === 'active';
+              const aprPercent = Number((product.interestRate * 100).toFixed(2));
 
-            return (
-              <div 
-                key={product.id}
-                className={cn(
-                  "data-card group hover:shadow-lg transition-all duration-300",
-                  !isAvailable && "opacity-60"
-                )}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-lg text-foreground">{product.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {product.term} {t('common.days')}
-                    </p>
+              return (
+                <div
+                  key={product.id}
+                  className={cn(
+                    "data-card group hover:shadow-lg transition-all duration-300",
+                    !isAvailable && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold text-lg text-foreground">{product.termDays}-Day Lock</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {product.termDays} {t('common.days')}
+                      </p>
+                    </div>
+                    <Badge className={status.className}>
+                      {status.label}
+                    </Badge>
                   </div>
-                  <Badge className={status.className}>
-                    {status.label}
-                  </Badge>
-                </div>
 
-                <div className="space-y-3 mb-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('landing.apr')}</span>
-                    <span className="text-2xl font-bold text-accent">{product.apr}%</span>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">{t('landing.apr')}</span>
+                      <span className="text-2xl font-bold text-accent">{aprPercent}%</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">{t('landing.minAmount')}</span>
+                      <span className="font-medium">${product.minAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">{t('landing.maxAmount')}</span>
+                      <span className="font-medium">${product.maxAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">{t('landing.quota')}</span>
+                      <span className="font-medium">${product.availableQuota.toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('landing.minAmount')}</span>
-                    <span className="font-medium">${product.minAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('landing.maxAmount')}</span>
-                    <span className="font-medium">${product.maxAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t('landing.quota')}</span>
-                    <span className="font-medium">${product.quota.toLocaleString()}</span>
-                  </div>
-                </div>
 
-                <div className="flex gap-2">
-                  <Link to={`/products/${product.id}`} className="flex-1">
-                    <Button variant="outline" className="w-full" size="sm">
-                      {t('common.viewDetails')}
-                    </Button>
-                  </Link>
-                  {isAvailable && (
-                    <Link to={`/products/${product.id}/subscribe`} className="flex-1">
-                      <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" size="sm">
-                        {t('common.subscribe')}
+                  <div className="flex gap-2">
+                    <Link to={`/products/${product.id}`} className="flex-1">
+                      <Button variant="outline" className="w-full" size="sm">
+                        {t('common.viewDetails')}
                       </Button>
                     </Link>
-                  )}
+                    {isAvailable && (
+                      <Link to={`/products/${product.id}/subscribe`} className="flex-1">
+                        <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" size="sm">
+                          {t('common.subscribe')}
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </MainLayout>
   );

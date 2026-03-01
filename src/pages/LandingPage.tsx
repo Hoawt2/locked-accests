@@ -5,18 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight, Shield, TrendingUp, Clock, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { fetchLockedProducts, LockedProduct } from '@/pages/ProductsPage';
 
-// Mock product data
-const products = [
-  { id: 1, name: '30-Day Lock', term: 30, apr: 8.5, minAmount: 100, maxAmount: 50000, quota: 125000, status: 'active' },
-  { id: 2, name: '60-Day Lock', term: 60, apr: 10.2, minAmount: 500, maxAmount: 100000, quota: 89000, status: 'active' },
-  { id: 3, name: '90-Day Lock', term: 90, apr: 12.0, minAmount: 1000, maxAmount: 200000, quota: 0, status: 'full' },
-  { id: 4, name: '180-Day Lock', term: 180, apr: 15.5, minAmount: 5000, maxAmount: 500000, quota: 450000, status: 'active' },
-  { id: 5, name: '365-Day Lock', term: 365, apr: 18.0, minAmount: 10000, maxAmount: 1000000, quota: 800000, status: 'inactive' },
-];
-
-function ProductCard({ product }: { product: typeof products[0] }) {
+function ProductCard({ product }: { product: LockedProduct }) {
   const { t } = useLanguage();
+
+  const getStatusKey = () => {
+    const s = product.status?.toUpperCase();
+    if (s === 'ACTIVE') return 'active';
+    if (s === 'FULL' || product.availableQuota <= 0) return 'full';
+    return 'inactive';
+  };
 
   const statusConfig = {
     active: { label: t('common.active'), className: 'status-success' },
@@ -24,8 +24,10 @@ function ProductCard({ product }: { product: typeof products[0] }) {
     inactive: { label: t('common.inactive'), className: 'status-error' },
   };
 
-  const status = statusConfig[product.status as keyof typeof statusConfig];
-  const isAvailable = product.status === 'active';
+  const statusKey = getStatusKey();
+  const status = statusConfig[statusKey];
+  const isAvailable = statusKey === 'active';
+  const aprPercent = Number((product.interestRate * 100).toFixed(2));
 
   const userRole = localStorage.getItem('userRole');
 
@@ -36,9 +38,9 @@ function ProductCard({ product }: { product: typeof products[0] }) {
     )}>
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-lg text-foreground">{product.name}</h3>
+          <h3 className="font-semibold text-lg text-foreground">{product.termDays}-Day Lock</h3>
           <p className="text-sm text-muted-foreground">
-            {product.term} {t('common.days')}
+            {product.termDays} {t('common.days')}
           </p>
         </div>
         <Badge className={status.className}>
@@ -49,7 +51,7 @@ function ProductCard({ product }: { product: typeof products[0] }) {
       <div className="space-y-3 mb-6">
         <div className="flex justify-between items-center">
           <span className="text-sm text-muted-foreground">{t('landing.apr')}</span>
-          <span className="text-2xl font-bold text-accent">{product.apr}%</span>
+          <span className="text-2xl font-bold text-accent">{aprPercent}%</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-muted-foreground">{t('landing.minAmount')}</span>
@@ -61,7 +63,7 @@ function ProductCard({ product }: { product: typeof products[0] }) {
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-muted-foreground">{t('landing.quota')}</span>
-          <span className="font-medium">${product.quota.toLocaleString()}</span>
+          <span className="font-medium">${product.availableQuota.toLocaleString()}</span>
         </div>
       </div>
 
@@ -85,6 +87,11 @@ function ProductCard({ product }: { product: typeof products[0] }) {
 
 export default function LandingPage() {
   const { t } = useLanguage();
+
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['lockedProducts'],
+    queryFn: fetchLockedProducts,
+  });
 
   return (
     <MainLayout hideSidebar>
@@ -171,11 +178,17 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

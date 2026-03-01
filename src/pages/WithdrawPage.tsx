@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowDownToLine, Info } from 'lucide-react';
+import { ArrowDownToLine, Info, ArrowRight } from 'lucide-react';
 import {
     Tooltip,
     TooltipContent,
@@ -19,56 +20,52 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// Mock data structured around the Earnings table DataModel
-const earningsData = [
-    {
-        id: 1,
-        productName: '90-Day Lock',
-        principal: 50000,
-        available: 1540.20,
-        holdingDays: 41,
-        termDays: 90,
-        totalInterest: 986.30,
-        interestPerDay: 24.05,
-    },
-    {
-        id: 2,
-        productName: '60-Day Lock',
-        principal: 30000,
-        available: 200.00,
-        holdingDays: 25,
-        termDays: 60,
-        totalInterest: 420.80,
-        interestPerDay: 16.83,
-    },
-    {
-        id: 3,
-        productName: '30-Day Lock',
-        principal: 10000,
-        available: 0,
-        holdingDays: 8,
-        termDays: 30,
-        totalInterest: 58.20,
-        interestPerDay: 7.27,
-    },
-];
+interface EarningData {
+    earningId: number;
+    termDays: number;
+    principal: number;
+    availableToWithdraw: number;
+    accruedInterest: number;
+    holdingDays: number;
+    progress: number;
+}
 
-function WithdrawActionDialog({ earning }: { earning: typeof earningsData[0] }) {
+const fetchEarnings = async (): Promise<EarningData[]> => {
+    const walletId = localStorage.getItem('X-WALLET-ID');
+    if (!walletId) return [];
+
+    const response = await fetch('/api/user/earnings', {
+        headers: { 'X-WALLET-ID': walletId },
+    });
+
+    if (!response.ok) {
+        if (response.status === 404) return [];
+        throw new Error('Failed to fetch earnings');
+    }
+
+    const result = await response.json();
+    return result.data || [];
+};
+
+function WithdrawActionDialog({ earning }: { earning: EarningData }) {
     const { t } = useLanguage();
+    const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
     const [amount, setAmount] = useState<string>('');
     const [isConfirming, setIsConfirming] = useState(false);
     const [error, setError] = useState<string>('');
 
+    const walletId = localStorage.getItem('X-WALLET-ID') || '';
     const parsedAmount = parseFloat(amount || '0');
 
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
         if (parsedAmount <= 0) {
             setError(t('withdraw.errorMin') || 'Please enter a valid amount greater than 0.');
             return;
         }
-        if (parsedAmount > earning.available) {
+        if (parsedAmount > earning.availableToWithdraw) {
             setError(t('withdraw.errorMax') || 'Withdrawal amount exceeds available balance.');
             return;
         }
@@ -76,16 +73,38 @@ function WithdrawActionDialog({ earning }: { earning: typeof earningsData[0] }) 
         setError('');
         setIsConfirming(true);
 
-        // Simulate network delay
-        setTimeout(() => {
-            setIsConfirming(false);
+        try {
+            const response = await fetch('/api/user/earnings/withdraw', {
+                method: 'POST',
+                headers: {
+                    'X-WALLET-ID': walletId,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    earningId: earning.earningId,
+                    amount: parsedAmount,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Withdrawal failed');
+            }
+
             setIsOpen(false);
             setAmount('');
-        }, 1500);
+            // Refresh earnings data
+            queryClient.invalidateQueries({ queryKey: ['earnings'] });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Something went wrong');
+        } finally {
+            setIsConfirming(false);
+        }
     };
 
     const handleMaxClick = () => {
-        setAmount(earning.available.toString());
+        setAmount(earning.availableToWithdraw.toString());
         setError('');
     };
 
@@ -97,7 +116,7 @@ function WithdrawActionDialog({ earning }: { earning: typeof earningsData[0] }) 
         }
     };
 
-    if (earning.available <= 0) {
+    if (earning.availableToWithdraw <= 0) {
         return (
             <Button variant="outline" size="sm" disabled>
                 <ArrowDownToLine className="w-4 h-4 mr-1" />
@@ -125,7 +144,7 @@ function WithdrawActionDialog({ earning }: { earning: typeof earningsData[0] }) 
                 <div className="space-y-4 py-4">
                     <div className="p-4 bg-secondary/50 rounded-lg flex justify-between items-center mb-4">
                         <span className="text-muted-foreground">{t('withdraw.availableToWithdraw') || 'Available to Withdraw'}</span>
-                        <span className="text-xl font-bold text-accent">${earning.available.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-accent">${earning.availableToWithdraw.toLocaleString()}</span>
                     </div>
 
                     <div className="space-y-2">
@@ -177,16 +196,32 @@ function WithdrawActionDialog({ earning }: { earning: typeof earningsData[0] }) 
 
 export default function WithdrawPage() {
     const { t } = useLanguage();
+    const navigate = useNavigate();
+
+    const { data: earningsData = [], isLoading } = useQuery({
+        queryKey: ['earnings'],
+        queryFn: fetchEarnings,
+    });
 
     return (
         <MainLayout>
             <div className="p-6 max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold mb-1">{t('nav.withdraw') || 'Withdraw Available'}</h1>
-                    <p className="text-muted-foreground">
-                        {t('withdraw.subtitle') || 'Withdraw your accumulated interest and available funds.'}
-                    </p>
+                <div className="mb-8 flex items-start justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold mb-1">{t('nav.withdraw') || 'Withdraw Available'}</h1>
+                        <p className="text-muted-foreground">
+                            {t('withdraw.subtitle') || 'Withdraw your accumulated interest and available funds.'}
+                        </p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate('/withdraw/transactions')}
+                        className="flex items-center gap-2"
+                    >
+                        Withdraw Transactions
+                        <ArrowRight className="w-4 h-4" />
+                    </Button>
                 </div>
 
                 {/* WithdrawTable */}
@@ -229,19 +264,25 @@ export default function WithdrawPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {earningsData.map((earning) => {
-                                    const progress = Math.round((earning.holdingDays / earning.termDays) * 100);
+                                {isLoading ? (
+                                    <tr>
+                                        <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                                            Loading earnings...
+                                        </td>
+                                    </tr>
+                                ) : earningsData.map((earning) => {
+                                    const progress = Math.round(earning.progress * 100);
                                     return (
-                                        <tr key={earning.id}>
+                                        <tr key={earning.earningId}>
                                             <td>
-                                                <div className="font-medium">{earning.productName}</div>
+                                                <div className="font-medium">{earning.termDays}-Day Lock</div>
                                             </td>
                                             <td className="text-muted-foreground">${earning.principal.toLocaleString()}</td>
                                             <td className="font-bold text-accent">
-                                                ${earning.available.toLocaleString()}
+                                                ${earning.availableToWithdraw.toLocaleString()}
                                             </td>
                                             <td className="text-success font-medium">
-                                                +${earning.totalInterest.toLocaleString()}
+                                                +${earning.accruedInterest.toLocaleString()}
                                             </td>
                                             <td>
                                                 {earning.holdingDays} / {earning.termDays} {t('common.days')}
@@ -265,7 +306,7 @@ export default function WithdrawPage() {
                     </div>
                 </div>
 
-                {earningsData.length === 0 && (
+                {!isLoading && earningsData.length === 0 && (
                     <div className="data-card text-center py-12">
                         <p className="text-muted-foreground">{t('packages.noPackages') || 'No earnings data found.'}</p>
                     </div>

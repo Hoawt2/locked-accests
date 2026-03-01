@@ -47,20 +47,29 @@ const fetchEarningsSummary = async () => {
   const result = await response.json();
   return result.data;
 };
-// Mock data for recent activity (since it's not connected to API yet)
-const recentActivity = [
-  { id: 1, type: 'dailyInterest', amount: 16.44, date: '2024-01-15', status: 'success' },
-  { id: 2, type: 'earlyRedemption', amount: 30000, date: '2024-01-10', status: 'success' },
-  { id: 3, type: 'dailyInterest', amount: 9.86, date: '2024-01-09', status: 'success' },
-  { id: 4, type: 'redemption', amount: 5000, date: '2024-01-08', status: 'pending' },
-  { id: 5, type: 'dailyInterest', amount: 12.50, date: '2024-01-07', status: 'success' },
-];
+// Fetch earning transactions for recent activity
+const fetchRecentTransactions = async () => {
+  const walletId = localStorage.getItem('X-WALLET-ID');
+  if (!walletId) return [];
+
+  const response = await fetch('/api/user/transaction/earning', {
+    headers: { 'X-WALLET-ID': walletId },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return [];
+    throw new Error('Failed to fetch transactions');
+  }
+
+  const result = await response.json();
+  return result.data || [];
+};
 
 const getTypeLabel = (type: string) => {
   const types: Record<string, string> = {
-    dailyInterest: 'Daily Interest',
-    earlyRedemption: 'Early Redemption',
-    redemption: 'Redemption',
+    DAILY_INTEREST: 'Daily Interest',
+    EARLY_REDEEMED: 'Early Redemption',
+    REDEMPTION: 'Redemption',
   };
   return types[type] || type;
 };
@@ -122,6 +131,21 @@ export default function DashboardPage() {
     queryKey: ['activePackages'],
     queryFn: fetchActivePackages,
   });
+
+  const { data: rawTransactions = [] } = useQuery({
+    queryKey: ['earningTransactions'],
+    queryFn: fetchRecentTransactions,
+  });
+
+  const recentActivity = rawTransactions
+    .slice(0, 5)
+    .map((tx: any) => ({
+      id: tx.txId,
+      type: tx.type,
+      amount: tx.amount,
+      date: tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : 'N/A',
+      status: tx.status === 'SUCCESS' ? 'success' : tx.status === 'PENDING' ? 'pending' : 'failed',
+    }));
 
   const totalBalance = walletData?.totalBalance ?? 0;
   const availableBalance = walletData?.balanceAvailable ?? 0;

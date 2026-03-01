@@ -2,74 +2,66 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  TrendingUp, 
+import {
+  TrendingUp,
   DollarSign,
   CheckCircle2,
   Clock
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-// Mock data
-const investments = [
-  {
-    id: 1,
-    productName: '90-Day Lock',
-    principal: 25000,
-    interestEarned: 740.50,
-    finalAmount: 25740.50,
-    startDate: '2023-10-01',
-    completedDate: '2023-12-30',
-    status: 'matured',
-    apr: 12.0,
-  },
-  {
-    id: 2,
-    productName: '60-Day Lock',
-    principal: 15000,
-    interestEarned: 180.00,
-    penaltyAmount: 375.00,
-    finalAmount: 14805.00,
-    startDate: '2023-11-15',
-    completedDate: '2023-12-20',
-    status: 'early_redeemed',
-    apr: 10.2,
-  },
-  {
-    id: 3,
-    productName: '30-Day Lock',
-    principal: 5000,
-    interestEarned: 35.20,
-    finalAmount: 5035.20,
-    startDate: '2023-12-01',
-    completedDate: '2023-12-31',
-    status: 'matured',
-    apr: 8.5,
-  },
-  {
-    id: 4,
-    productName: '180-Day Lock',
-    principal: 50000,
-    interestEarned: 3875.00,
-    finalAmount: 53875.00,
-    startDate: '2023-06-15',
-    completedDate: '2023-12-12',
-    status: 'matured',
-    apr: 15.5,
-  },
-];
+interface CompletedSubscription {
+  subscriptionId: string;
+  termDays: number;
+  principal: number;
+  interestRate: number;
+  interestEarned: number;
+  finalAmount: number;
+  startDate: string;
+  completedDate: string;
+  status: string;
+  penaltyRate: number;
+  earlyRedeemRate: number;
+}
+
+const fetchCompletedSubscriptions = async (): Promise<CompletedSubscription[]> => {
+  const walletId = localStorage.getItem('X-WALLET-ID');
+  if (!walletId) return [];
+
+  const response = await fetch('/api/user/subscriptions/completed', {
+    headers: { 'X-WALLET-ID': walletId },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return [];
+    throw new Error('Failed to fetch completed subscriptions');
+  }
+
+  const result = await response.json();
+  return result.data || [];
+};
 
 export default function InvestmentHistoryPage() {
   const { t } = useLanguage();
 
+  const { data: investments = [], isLoading } = useQuery({
+    queryKey: ['completedSubscriptions'],
+    queryFn: fetchCompletedSubscriptions,
+  });
+
   const totalInvested = investments.reduce((sum, inv) => sum + inv.principal, 0);
-  const totalEarned = investments.reduce((sum, inv) => sum + inv.interestEarned, 0);
-  const maturedCount = investments.filter(inv => inv.status === 'matured').length;
+  const totalEarned = investments.reduce((sum, inv) => sum + (inv.interestEarned || 0), 0);
+  const maturedCount = investments.filter(inv => inv.status?.toUpperCase() === 'MATURED').length;
 
   const getStatusBadge = (status: string) => {
-    if (status === 'matured') {
+    const upper = status?.toUpperCase();
+    if (upper === 'MATURED') {
       return <Badge className="status-success">{t('history.matured')}</Badge>;
     }
-    return <Badge className="status-warning">{t('history.earlyRedeemed')}</Badge>;
+    if (upper === 'EARLY_REDEEMED') {
+      return <Badge className="status-warning">{t('history.earlyRedeemed')}</Badge>;
+    }
+    return <Badge className="status-pending">{status}</Badge>;
   };
 
   return (
@@ -121,6 +113,7 @@ export default function InvestmentHistoryPage() {
               <thead>
                 <tr>
                   <th>Product</th>
+                  <th>Subscription</th>
                   <th>{t('packages.principal')}</th>
                   <th>{t('packages.interestRate')}</th>
                   <th>Interest Earned</th>
@@ -131,26 +124,48 @@ export default function InvestmentHistoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {investments.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="font-medium">{inv.productName}</td>
-                    <td>${inv.principal.toLocaleString()}</td>
-                    <td>
-                      <Badge className="status-success">{inv.apr}%</Badge>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                      Loading history...
                     </td>
-                    <td className="text-success font-medium">
-                      +${inv.interestEarned.toLocaleString()}
-                    </td>
-                    <td className="font-semibold">${inv.finalAmount.toLocaleString()}</td>
-                    <td className="text-muted-foreground">{inv.startDate}</td>
-                    <td className="text-muted-foreground">{inv.completedDate}</td>
-                    <td>{getStatusBadge(inv.status)}</td>
                   </tr>
-                ))}
+                ) : investments.map((inv) => {
+                  const aprPercent = Number((inv.interestRate * 100).toFixed(2));
+                  return (
+                    <tr key={inv.subscriptionId}>
+                      <td className="font-medium">{inv.termDays}-Day Lock</td>
+                      <td className="text-sm font-mono text-muted-foreground">
+                        <span title={inv.subscriptionId}>
+                          {inv.subscriptionId.length > 8
+                            ? `${inv.subscriptionId.substring(0, 8)}...`
+                            : inv.subscriptionId}
+                        </span>
+                      </td>
+                      <td>${inv.principal.toLocaleString()}</td>
+                      <td>
+                        <Badge className="status-success">{aprPercent}%</Badge>
+                      </td>
+                      <td className="text-success font-medium">
+                        +${(inv.interestEarned || 0).toLocaleString()}
+                      </td>
+                      <td className="font-semibold">${(inv.finalAmount || 0).toLocaleString()}</td>
+                      <td className="text-muted-foreground">{inv.startDate}</td>
+                      <td className="text-muted-foreground">{inv.completedDate}</td>
+                      <td>{getStatusBadge(inv.status)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+
+        {!isLoading && investments.length === 0 && (
+          <div className="data-card text-center py-12">
+            <p className="text-muted-foreground">No investment history found</p>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

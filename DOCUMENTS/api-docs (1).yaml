@@ -442,6 +442,29 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ApiResponseDTOListSubscriptionResponse"
+  /api/user/subscriptions/completed:
+    get:
+      tags:
+      - User - Subscriptions
+      summary: Get completed subscriptions
+      description: Retrieve all subscriptions with status MATURED or EARLY_REDEEMED
+        for the given wallet
+      operationId: getCompletedSubscribe
+      parameters:
+      - name: X-WALLET-ID
+        in: header
+        description: User wallet identifier
+        required: true
+        schema:
+          type: string
+        example: 3ff732cb-cf34-41fe-b587-3d2e8cb93c68
+      responses:
+        "200":
+          description: Completed subscriptions retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDTOListCompletedSubscriptionResponse"
   /api/user/subscriptions/active:
     get:
       tags:
@@ -494,6 +517,48 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ApiResponseDTOListLockedProductResponse"
+  /api/user/earnings:
+    get:
+      tags:
+      - earning-controller
+      operationId: getEarnings
+      parameters:
+      - name: X-WALLET-ID
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDTOListEarningResponse"
+  /api/user/earnings/{earningId}/early-redeem/preview:
+    get:
+      tags:
+      - earning-controller
+      operationId: previewEarlyRedeem
+      parameters:
+      - name: earningId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-WALLET-ID
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDTOEarlyRedeemPreviewResponse"
   /api/user/earnings/summary:
     get:
       tags:
@@ -968,6 +1033,46 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SubscriptionResponse"
+    ApiResponseDTOListCompletedSubscriptionResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletedSubscriptionResponse"
+    CompletedSubscriptionResponse:
+      type: object
+      properties:
+        subscriptionId:
+          type: string
+          format: uuid
+        termDays:
+          type: integer
+          format: int32
+        principal:
+          type: number
+        interestRate:
+          type: number
+        interestEarned:
+          type: number
+        finalAmount:
+          type: number
+        startDate:
+          type: string
+          format: date
+        completedDate:
+          type: string
+          format: date
+        status:
+          type: string
+        penaltyRate:
+          type: number
+        earlyRedeemRate:
+          type: number
     ActivePackageResponse:
       type: object
       properties:
@@ -1021,6 +1126,64 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LockedProductResponse"
+    ApiResponseDTOListEarningResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EarningResponse"
+    EarningResponse:
+      type: object
+      properties:
+        earningId:
+          type: integer
+          format: int64
+        termDays:
+          type: integer
+          format: int32
+        principal:
+          type: number
+        availableToWithdraw:
+          type: number
+        accruedInterest:
+          type: number
+        holdingDays:
+          type: integer
+          format: int32
+        progress:
+          type: number
+    ApiResponseDTOEarlyRedeemPreviewResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/EarlyRedeemPreviewResponse"
+    EarlyRedeemPreviewResponse:
+      type: object
+      properties:
+        earningId:
+          type: integer
+          format: int64
+        principal:
+          type: number
+        accruedInterest:
+          type: number
+        currentProgress:
+          type: number
+        penaltyRate:
+          type: number
+        penaltyAmount:
+          type: number
+        finalReceivableAmount:
+          type: number
     ApiResponseDTOEarningSummaryResponse:
       type: object
       properties:

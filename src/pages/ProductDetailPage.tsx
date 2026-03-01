@@ -3,10 +3,10 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link, useParams } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Clock, 
-  TrendingUp, 
+import {
+  ArrowLeft,
+  Clock,
+  TrendingUp,
   Info,
   AlertTriangle,
   CheckCircle2
@@ -16,22 +16,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-
-// Mock product data
-const products = [
-  { id: 1, name: '30-Day Lock', term: 30, apr: 8.5, minAmount: 100, maxAmount: 50000, quota: 125000, status: 'active', description: 'Short-term investment with guaranteed returns. Perfect for beginners.' },
-  { id: 2, name: '60-Day Lock', term: 60, apr: 10.2, minAmount: 500, maxAmount: 100000, quota: 89000, status: 'active', description: 'Medium-term lock with higher APR. Ideal for steady growth.' },
-  { id: 3, name: '90-Day Lock', term: 90, apr: 12.0, minAmount: 1000, maxAmount: 200000, quota: 0, status: 'full', description: 'Popular choice with balanced term and returns.' },
-  { id: 4, name: '180-Day Lock', term: 180, apr: 15.5, minAmount: 5000, maxAmount: 500000, quota: 450000, status: 'active', description: 'Long-term investment for serious investors seeking higher yields.' },
-  { id: 5, name: '365-Day Lock', term: 365, apr: 18.0, minAmount: 10000, maxAmount: 1000000, quota: 800000, status: 'inactive', description: 'Maximum returns for committed long-term investors.' },
-];
+import { useQuery } from '@tanstack/react-query';
+import { fetchLockedProducts, LockedProduct } from '@/pages/ProductsPage';
 
 export default function ProductDetailPage() {
   const { t } = useLanguage();
   const { id } = useParams();
-  
-  const product = products.find(p => p.id === Number(id)) || products[0];
-  const isAvailable = product.status === 'active';
+
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['lockedProducts'],
+    queryFn: fetchLockedProducts,
+  });
+
+  const product = products.find(p => p.id === Number(id));
+
+  const getStatusKey = (p: LockedProduct) => {
+    const s = p.status?.toUpperCase();
+    if (s === 'ACTIVE') return 'active';
+    if (s === 'FULL' || p.availableQuota <= 0) return 'full';
+    return 'inactive';
+  };
 
   const statusConfig = {
     active: { label: t('common.active'), className: 'status-success' },
@@ -39,7 +43,36 @@ export default function ProductDetailPage() {
     inactive: { label: t('common.inactive'), className: 'status-error' },
   };
 
-  const status = statusConfig[product.status as keyof typeof statusConfig];
+  if (isLoading) {
+    return (
+      <MainLayout hideSidebar>
+        <div className="flex items-center justify-center py-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!product) {
+    return (
+      <MainLayout hideSidebar>
+        <div className="p-6 max-w-4xl mx-auto text-center py-16">
+          <p className="text-muted-foreground">Product not found</p>
+          <Link to="/products">
+            <Button variant="outline" className="mt-4">{t('common.back')}</Button>
+          </Link>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const statusKey = getStatusKey(product);
+  const status = statusConfig[statusKey];
+  const isAvailable = statusKey === 'active';
+  const aprPercent = Number((product.interestRate * 100).toFixed(2));
+  const quotaProgress = product.totalQuota > 0
+    ? Math.round((product.availableQuota / product.totalQuota) * 100)
+    : 0;
 
   return (
     <MainLayout hideSidebar>
@@ -55,14 +88,14 @@ export default function ProductDetailPage() {
           <div className="flex items-start justify-between mb-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold">{product.name}</h1>
+                <h1 className="text-2xl font-bold">{product.termDays}-Day Lock</h1>
                 <Badge className={status.className}>{status.label}</Badge>
               </div>
-              <p className="text-muted-foreground">{product.description}</p>
+              <p className="text-muted-foreground">{product.termDays}-day locked-term saving product</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground mb-1">{t('landing.apr')}</p>
-              <p className="text-4xl font-bold text-accent">{product.apr}%</p>
+              <p className="text-4xl font-bold text-accent">{aprPercent}%</p>
             </div>
           </div>
 
@@ -73,14 +106,14 @@ export default function ProductDetailPage() {
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('landing.term')}</span>
               </div>
-              <p className="text-xl font-semibold">{product.term} {t('common.days')}</p>
+              <p className="text-xl font-semibold">{product.termDays} {t('common.days')}</p>
             </div>
             <div className="p-4 bg-secondary/30 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('landing.apr')}</span>
               </div>
-              <p className="text-xl font-semibold text-accent">{product.apr}%</p>
+              <p className="text-xl font-semibold text-accent">{aprPercent}%</p>
             </div>
             <div className="p-4 bg-secondary/30 rounded-lg">
               <span className="text-sm text-muted-foreground">{t('landing.minAmount')}</span>
@@ -132,18 +165,21 @@ export default function ProductDetailPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground mb-1">{t('landing.quota')}</p>
-              <p className="text-2xl font-bold">${product.quota.toLocaleString()}</p>
+              <p className="text-2xl font-bold">${product.availableQuota.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                of ${product.totalQuota.toLocaleString()} total
+              </p>
             </div>
-            {product.quota > 0 && (
+            {product.totalQuota > 0 && (
               <div className="w-32">
                 <div className="progress-track h-3">
-                  <div 
-                    className="progress-fill" 
-                    style={{ width: `${Math.min((product.quota / product.maxAmount) * 100, 100)}%` }} 
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${quotaProgress}%` }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 text-right">
-                  {Math.round((product.quota / product.maxAmount) * 100)}% available
+                  {quotaProgress}% available
                 </p>
               </div>
             )}
