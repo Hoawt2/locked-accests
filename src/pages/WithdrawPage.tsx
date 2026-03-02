@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowDownToLine, Info, ArrowRight } from 'lucide-react';
+import { ArrowDownToLine, Info, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 import {
     Tooltip,
     TooltipContent,
@@ -49,9 +49,16 @@ const fetchEarnings = async (): Promise<EarningData[]> => {
     return result.data || [];
 };
 
-function WithdrawActionDialog({ earning }: { earning: EarningData }) {
+function WithdrawActionDialog({
+    earning,
+    onSuccess,
+    onError
+}: {
+    earning: EarningData;
+    onSuccess: (amount: number) => void;
+    onError: (error: string) => void;
+}) {
     const { t } = useLanguage();
-    const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
     const [amount, setAmount] = useState<string>('');
     const [isConfirming, setIsConfirming] = useState(false);
@@ -94,10 +101,13 @@ function WithdrawActionDialog({ earning }: { earning: EarningData }) {
 
             setIsOpen(false);
             setAmount('');
-            // Refresh earnings data
-            queryClient.invalidateQueries({ queryKey: ['earnings'] });
+            onSuccess(parsedAmount);
+            // Refresh earnings data happens in parent
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Something went wrong');
+            const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+            setError(errorMsg);
+            setIsOpen(false);
+            onError(errorMsg);
         } finally {
             setIsConfirming(false);
         }
@@ -197,11 +207,78 @@ function WithdrawActionDialog({ earning }: { earning: EarningData }) {
 export default function WithdrawPage() {
     const { t } = useLanguage();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     const { data: earningsData = [], isLoading } = useQuery({
         queryKey: ['earnings'],
         queryFn: fetchEarnings,
     });
+
+    const [result, setResult] = useState<'success' | 'failed' | null>(null);
+    const [withdrawAmount, setWithdrawAmount] = useState<number>(0);
+    const [errorMessage, setErrorMessage] = useState('');
+
+    const handleSuccess = (amount: number) => {
+        setWithdrawAmount(amount);
+        setResult('success');
+        queryClient.invalidateQueries({ queryKey: ['earnings'] });
+    };
+
+    const handleError = (error: string) => {
+        setErrorMessage(error);
+        setResult('failed');
+    };
+
+    if (result) {
+        return (
+            <MainLayout hideSidebar>
+                <div className="p-6 max-w-md mx-auto text-center py-20">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${result === 'success' ? 'bg-success/10' : 'bg-destructive/10'
+                        }`}>
+                        {result === 'success' ? (
+                            <CheckCircle2 className="w-10 h-10 text-success" />
+                        ) : (
+                            <XCircle className="w-10 h-10 text-destructive" />
+                        )}
+                    </div>
+                    <h1 className="text-2xl font-bold mb-2">
+                        {result === 'success' ? 'Withdrawal Successful' : 'Withdrawal Failed'}
+                    </h1>
+                    <p className="text-muted-foreground mb-8">
+                        {result === 'success'
+                            ? `You have successfully withdrawn $${withdrawAmount.toLocaleString()}. The funds should be available in your wallet.`
+                            : errorMessage || 'There was an error processing your withdrawal. Please try again.'
+                        }
+                    </p>
+                    <div className="flex gap-4 justify-center">
+                        {result === 'success' ? (
+                            <>
+                                <Link to="/withdraw/transactions">
+                                    <Button className="bg-accent hover:bg-accent/90">
+                                        View Transactions
+                                    </Button>
+                                </Link>
+                                <Button variant="outline" onClick={() => setResult(null)}>
+                                    Back to Withdraw
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button onClick={() => setResult(null)}>
+                                    Try Again
+                                </Button>
+                                <Link to="/dashboard">
+                                    <Button variant="outline">
+                                        {t('nav.dashboard')}
+                                    </Button>
+                                </Link>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </MainLayout>
+        );
+    }
 
     return (
         <MainLayout>
@@ -296,7 +373,11 @@ export default function WithdrawPage() {
                                                 </div>
                                             </td>
                                             <td>
-                                                <WithdrawActionDialog earning={earning} />
+                                                <WithdrawActionDialog
+                                                    earning={earning}
+                                                    onSuccess={handleSuccess}
+                                                    onError={handleError}
+                                                />
                                             </td>
                                         </tr>
                                     );

@@ -59,7 +59,7 @@ export default function TransactionsPage() {
       originalType: tx.type,
       type: tx.type === 'DAILY_INTEREST' ? 'dailyInterest' : tx.type === 'EARLY_REDEEMED' ? 'earlyRedemption' : 'redemption',
       earningId: tx.earningId,
-      subscriptionId: matchedPackage ? matchedPackage.id : `EARN-${tx.earningId}`,
+      subscriptionId: tx.subscriptionId || (matchedPackage ? matchedPackage.id : `EARN-${tx.earningId}`),
       amount: tx.amount,
       date: tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : 'N/A',
       status: tx.status === 'SUCCESS' ? 'success' : tx.status === 'PENDING' ? 'pending' : 'failed',
@@ -174,7 +174,11 @@ export default function TransactionsPage() {
                       <td>
                         <span className="font-medium">{getTypeLabel(tx.type)}</span>
                       </td>
-                      <td className="text-muted-foreground font-mono text-sm">{tx.subscriptionId}</td>
+                      <td className="text-muted-foreground font-mono text-sm">
+                        <span title={tx.subscriptionId}>
+                          {tx.subscriptionId?.length > 8 ? `${tx.subscriptionId.substring(0, 8)}...` : tx.subscriptionId}
+                        </span>
+                      </td>
                       <td className={`font-medium ${tx.amount > 0 ? 'text-success' : ''}`}>
                         {tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>

@@ -6,8 +6,14 @@ import {
   TrendingUp,
   DollarSign,
   CheckCircle2,
-  Clock
+  Clock,
+  Info
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useQuery } from '@tanstack/react-query';
 
 interface CompletedSubscription {
@@ -116,6 +122,19 @@ export default function InvestmentHistoryPage() {
                   <th>Subscription</th>
                   <th>{t('packages.principal')}</th>
                   <th>{t('packages.interestRate')}</th>
+                  <th>
+                    <div className="flex items-center gap-1">
+                      Early Redeem Rate
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>The effective interest rate applied if you redeem before maturity</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </th>
                   <th>Interest Earned</th>
                   <th>{t('history.finalAmount')}</th>
                   <th>{t('packages.startDate')}</th>
@@ -126,12 +145,13 @@ export default function InvestmentHistoryPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={10} className="text-center py-8 text-muted-foreground">
                       Loading history...
                     </td>
                   </tr>
                 ) : investments.map((inv) => {
                   const aprPercent = Number((inv.interestRate * 100).toFixed(2));
+                  const earlyRedeemPercent = Number(((inv.earlyRedeemRate || 0) * 100).toFixed(2));
                   return (
                     <tr key={inv.subscriptionId}>
                       <td className="font-medium">{inv.termDays}-Day Lock</td>
@@ -145,6 +165,11 @@ export default function InvestmentHistoryPage() {
                       <td>${inv.principal.toLocaleString()}</td>
                       <td>
                         <Badge className="status-success">{aprPercent}%</Badge>
+                      </td>
+                      <td>
+                        <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 text-white border-transparent shadow-sm">
+                          {earlyRedeemPercent}%
+                        </Badge>
                       </td>
                       <td className="text-success font-medium">
                         +${(inv.interestEarned || 0).toLocaleString()}

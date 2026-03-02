@@ -5,7 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Clock,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import {
   Tooltip,
@@ -22,8 +24,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface ActionPackageResponse {
   subscriptionId: string;
@@ -106,7 +109,15 @@ interface EarlyRedeemPreview {
   finalReceivableAmount: number;
 }
 
-function EarlyRedemptionDialog({ pkg }: { pkg: PackageData }) {
+function EarlyRedemptionDialog({
+  pkg,
+  onSuccess,
+  onError
+}: {
+  pkg: PackageData;
+  onSuccess: (amount: number) => void;
+  onError: (error: string) => void;
+}) {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -158,10 +169,16 @@ function EarlyRedemptionDialog({ pkg }: { pkg: PackageData }) {
       });
       if (!response.ok) throw new Error('Early redemption failed');
       setIsOpen(false);
-      // Reload the page to reflect updated data
-      window.location.reload();
+      if (preview) {
+        onSuccess(preview.finalReceivableAmount);
+      } else {
+        onSuccess(0);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+      setError(errorMsg);
+      setIsOpen(false);
+      onError(errorMsg);
     } finally {
       setIsConfirming(false);
     }
@@ -259,11 +276,78 @@ function EarlyRedemptionDialog({ pkg }: { pkg: PackageData }) {
 
 export default function ActivePackagesPage() {
   const { t } = useLanguage();
+  const queryClient = useQueryClient();
 
   const { data: activePackages = [], isLoading, error } = useQuery({
     queryKey: ['activePackages'],
     queryFn: fetchActivePackages,
   });
+
+  const [result, setResult] = useState<'success' | 'failed' | null>(null);
+  const [redeemAmount, setRedeemAmount] = useState<number>(0);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleSuccess = (amount: number) => {
+    setRedeemAmount(amount);
+    setResult('success');
+    queryClient.invalidateQueries({ queryKey: ['activePackages'] });
+  };
+
+  const handleError = (err: string) => {
+    setErrorMessage(err);
+    setResult('failed');
+  };
+
+  if (result) {
+    return (
+      <MainLayout hideSidebar>
+        <div className="p-6 max-w-md mx-auto text-center py-20">
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${result === 'success' ? 'bg-success/10' : 'bg-destructive/10'
+            }`}>
+            {result === 'success' ? (
+              <CheckCircle2 className="w-10 h-10 text-success" />
+            ) : (
+              <XCircle className="w-10 h-10 text-destructive" />
+            )}
+          </div>
+          <h1 className="text-2xl font-bold mb-2">
+            {result === 'success' ? 'Early Redemption Successful' : 'Early Redemption Failed'}
+          </h1>
+          <p className="text-muted-foreground mb-8">
+            {result === 'success'
+              ? `You have successfully redeemed $${redeemAmount.toLocaleString()}. The funds should be available in your wallet.`
+              : errorMessage || 'There was an error processing your early redemption. Please try again.'
+            }
+          </p>
+          <div className="flex gap-4 justify-center">
+            {result === 'success' ? (
+              <>
+                <Link to="/history">
+                  <Button className="bg-accent hover:bg-accent/90">
+                    {t('nav.history')}
+                  </Button>
+                </Link>
+                <Button variant="outline" onClick={() => setResult(null)}>
+                  Back to Packages
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={() => setResult(null)}>
+                  Try Again
+                </Button>
+                <Link to="/dashboard">
+                  <Button variant="outline">
+                    {t('nav.dashboard')}
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -353,7 +437,11 @@ export default function ActivePackagesPage() {
                       </td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <EarlyRedemptionDialog pkg={pkg} />
+                          <EarlyRedemptionDialog
+                            pkg={pkg}
+                            onSuccess={handleSuccess}
+                            onError={handleError}
+                          />
                         </div>
                       </td>
                     </tr>

@@ -621,6 +621,30 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ApiResponseDTOLockedProductResponse"
+  /api/cms/liquidity-ledger/ledger-tx:
+    get:
+      tags:
+      - liquidity-ledger-controller
+      operationId: getLedgerTx
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDTOListLiquidityLedgerResponse"
+  /api/cms/earnings/ets-daily-interest:
+    get:
+      tags:
+      - cms-earning-controller
+      operationId: getEtsDailyInterest
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDTOSumInterestPerDay"
   /api/cms/user-wallets/{walletId}:
     delete:
       tags:
@@ -1199,4 +1223,36 @@ components:
         totalAvailable:
           type: number
         totalInterest:
+          type: number
+    ApiResponseDTOListLiquidityLedgerResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiquidityLedgerResponse"
+    LiquidityLedgerResponse:
+      type: object
+      properties:
+        amount:
+          type: number
+        availableAfter:
+          type: number
+    ApiResponseDTOSumInterestPerDay:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/SumInterestPerDay"
+    SumInterestPerDay:
+      type: object
+      properties:
+        estimateDailyInterest:
           type: number

@@ -6,9 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useState } from 'react';
-import { 
-  Droplets, 
-  AlertTriangle, 
+import {
+  Droplets,
+  AlertTriangle,
   CheckCircle2,
   TrendingUp,
   TrendingDown,
@@ -23,36 +23,47 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// Mock data
-const liquidityData = {
-  totalLiquidity: 2500000,
-  minThreshold: 500000,
-  utilizationRate: 68,
-  status: 'normal' as 'normal' | 'warning' | 'critical',
-  pendingPayouts: 125000,
-  dailyInterest: 8500,
-  history: [
-    { date: '2024-01-20', amount: 2500000, change: 50000 },
-    { date: '2024-01-19', amount: 2450000, change: -25000 },
-    { date: '2024-01-18', amount: 2475000, change: 100000 },
-    { date: '2024-01-17', amount: 2375000, change: -15000 },
-  ],
-};
+// Mock data removed in favor of APIs
 
-function InjectLiquidityDialog() {
+function InjectLiquidityDialog({ onSuccess }: { onSuccess: () => void }) {
   const { t } = useLanguage();
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
+    setError(null);
+    try {
+      const response = await fetch('/api/cms/liquidity-pool/inject', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: parseFloat(amount),
+          note: reason,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || 'Failed to inject liquidity');
+      }
+
       setShowSuccess(true);
-    }, 1500);
+      setTimeout(() => {
+        onSuccess();
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (showSuccess) {
@@ -79,7 +90,7 @@ function InjectLiquidityDialog() {
           Add funds to the liquidity pool to maintain system stability.
         </DialogDescription>
       </DialogHeader>
-      
+
       <div className="space-y-4 py-4">
         <div>
           <Label htmlFor="inject-amount">{t('common.amount')}</Label>
@@ -105,11 +116,12 @@ function InjectLiquidityDialog() {
             className="mt-1"
           />
         </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
 
       <DialogFooter>
         <Button variant="outline">{t('common.cancel')}</Button>
-        <Button 
+        <Button
           onClick={handleSubmit}
           disabled={!amount || !reason || isProcessing}
           className="bg-accent hover:bg-accent/90"
@@ -123,24 +135,65 @@ function InjectLiquidityDialog() {
 
 export default function AdminLiquidityPage() {
   const { t } = useLanguage();
+  const queryClient = useQueryClient();
+
+  const { data: pools = [], isLoading } = useQuery({
+    queryKey: ['liquidityPools'],
+    queryFn: async () => {
+      const response = await fetch('/api/cms/liquidity-pool');
+      if (!response.ok) throw new Error('Failed to fetch liquidity pools');
+      const result = await response.json();
+      return result.data || [];
+    },
+  });
+
+  const { data: dailyInterest = 0, isLoading: isLoadingInterest } = useQuery({
+    queryKey: ['dailyInterest'],
+    queryFn: async () => {
+      const response = await fetch('/api/cms/earnings/ets-daily-interest');
+      if (!response.ok) return 0;
+      const result = await response.json();
+      return result.data?.estimateDailyInterest || 0;
+    },
+  });
+
+  const { data: ledgerHistory = [], isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['liquidityLedger'],
+    queryFn: async () => {
+      const response = await fetch('/api/cms/liquidity-ledger/ledger-tx');
+      if (!response.ok) return [];
+      const result = await response.json();
+      return result.data || [];
+    },
+  });
+
+  const totalLiquidity = pools.reduce((sum: number, pool: any) => sum + (pool.totalAmount || 0), 0);
+  const minThreshold = pools.reduce((sum: number, pool: any) => sum + (pool.minThreshold || 0), 0);
+
+  let currentStatus = 'critical';
+  if (totalLiquidity >= minThreshold) {
+    currentStatus = 'normal';
+  } else if (totalLiquidity >= minThreshold * 0.5) {
+    currentStatus = 'warning';
+  }
 
   const statusConfig = {
-    normal: { 
-      label: t('admin.liquidity.normal'), 
+    normal: {
+      label: t('admin.liquidity.normal'),
       className: 'status-success',
       bgClass: 'bg-success/10 border-success/20',
       icon: CheckCircle2,
       iconClass: 'text-success'
     },
-    warning: { 
-      label: t('admin.liquidity.warning'), 
+    warning: {
+      label: t('admin.liquidity.warning'),
       className: 'status-warning',
       bgClass: 'bg-warning/10 border-warning/20',
       icon: AlertTriangle,
       iconClass: 'text-warning'
     },
-    critical: { 
-      label: t('admin.liquidity.critical'), 
+    critical: {
+      label: t('admin.liquidity.critical'),
       className: 'status-error',
       bgClass: 'bg-destructive/10 border-destructive/20',
       icon: AlertTriangle,
@@ -148,8 +201,12 @@ export default function AdminLiquidityPage() {
     },
   };
 
-  const status = statusConfig[liquidityData.status];
+  const status = statusConfig[currentStatus as keyof typeof statusConfig];
   const StatusIcon = status.icon;
+
+  const handleInjectionSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['liquidityPools'] });
+  };
 
   return (
     <MainLayout>
@@ -169,7 +226,7 @@ export default function AdminLiquidityPage() {
                 {t('admin.liquidity.inject')}
               </Button>
             </DialogTrigger>
-            <InjectLiquidityDialog />
+            <InjectLiquidityDialog onSuccess={handleInjectionSuccess} />
           </Dialog>
         </div>
 
@@ -185,7 +242,9 @@ export default function AdminLiquidityPage() {
                 <Badge className={status.className}>{status.label}</Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                Current liquidity is above the minimum threshold. System is operating normally.
+                {currentStatus === 'normal' && 'Current liquidity is safely above the minimum threshold. System is operating normally.'}
+                {currentStatus === 'warning' && 'Liquidity levels are nearing the minimum threshold. Consider a preemptive liquidity injection.'}
+                {currentStatus === 'critical' && 'Liquidity is critically low or below the minimum threshold! Immediate injection is strongly advised.'}
               </p>
             </div>
           </div>
@@ -200,7 +259,9 @@ export default function AdminLiquidityPage() {
               </div>
               <span className="text-sm text-muted-foreground">{t('admin.liquidity.totalLiquidity')}</span>
             </div>
-            <p className="text-2xl font-bold">${liquidityData.totalLiquidity.toLocaleString()}</p>
+            <p className="text-2xl font-bold">
+              {isLoading ? 'Loading...' : `$${totalLiquidity.toLocaleString()}`}
+            </p>
           </div>
           <div className="data-card">
             <div className="flex items-center gap-3 mb-2">
@@ -209,68 +270,53 @@ export default function AdminLiquidityPage() {
               </div>
               <span className="text-sm text-muted-foreground">{t('admin.liquidity.minThreshold')}</span>
             </div>
-            <p className="text-2xl font-bold">${liquidityData.minThreshold.toLocaleString()}</p>
+            <p className="text-2xl font-bold">
+              {isLoading ? 'Loading...' : `$${minThreshold.toLocaleString()}`}
+            </p>
           </div>
           <div className="data-card">
             <p className="text-sm text-muted-foreground mb-2">Pending Payouts</p>
-            <p className="text-2xl font-bold">${liquidityData.pendingPayouts.toLocaleString()}</p>
+            <p className="text-2xl font-bold">N/A</p>
             <p className="text-xs text-muted-foreground mt-1">Next 24 hours</p>
           </div>
           <div className="data-card">
             <p className="text-sm text-muted-foreground mb-2">Daily Interest Obligation</p>
-            <p className="text-2xl font-bold">${liquidityData.dailyInterest.toLocaleString()}</p>
+            <p className="text-2xl font-bold">
+              {isLoadingInterest ? '...' : `$${dailyInterest.toLocaleString()}`}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Est. daily payout</p>
           </div>
         </div>
 
-        {/* Utilization & History */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Utilization */}
-          <div className="data-card">
-            <h2 className="text-lg font-semibold mb-4">Utilization Rate</h2>
-            <div className="relative pt-2">
-              <div className="progress-track h-4">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${liquidityData.utilizationRate}%` }} 
-                />
-              </div>
-              <div className="flex justify-between mt-2 text-sm">
-                <span className="text-muted-foreground">0%</span>
-                <span className="font-medium">{liquidityData.utilizationRate}% utilized</span>
-                <span className="text-muted-foreground">100%</span>
-              </div>
-            </div>
-            <div className="mt-6 p-4 bg-secondary/30 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">Available for Payouts</p>
-              <p className="text-xl font-bold">
-                ${(liquidityData.totalLiquidity - liquidityData.minThreshold).toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          {/* History */}
+        {/* History */}
+        <div className="grid grid-cols-1 gap-6">
           <div className="data-card">
             <h2 className="text-lg font-semibold mb-4">Recent Changes</h2>
             <div className="space-y-3">
-              {liquidityData.history.map((entry, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
-                  <div>
-                    <p className="font-medium">${entry.amount.toLocaleString()}</p>
-                    <p className="text-sm text-muted-foreground">{entry.date}</p>
+              {isLoadingHistory ? (
+                <p className="text-sm text-muted-foreground">Loading history...</p>
+              ) : ledgerHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent changes found.</p>
+              ) : (
+                ledgerHistory.map((entry: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                    <div>
+                      <p className="font-medium">Amount: ${(entry.amount || 0).toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">Available After: ${(entry.availableAfter || 0).toLocaleString()}</p>
+                    </div>
+                    <div className={`flex items-center gap-1 ${(entry.amount || 0) > 0 ? 'text-success' : 'text-warning'}`}>
+                      {(entry.amount || 0) > 0 ? (
+                        <TrendingUp className="w-4 h-4" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4" />
+                      )}
+                      <span className="font-medium">
+                        {(entry.amount || 0) > 0 ? '+' : ''}${(entry.amount || 0).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className={`flex items-center gap-1 ${entry.change > 0 ? 'text-success' : 'text-destructive'}`}>
-                    {entry.change > 0 ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">
-                      {entry.change > 0 ? '+' : ''}${entry.change.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
